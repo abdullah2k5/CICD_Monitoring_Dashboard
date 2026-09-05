@@ -1,0 +1,8 @@
+/* MUI's CssBaseline handles most base resets; keep this file minimal. */
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
