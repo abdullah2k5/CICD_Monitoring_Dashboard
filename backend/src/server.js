@@ -12,7 +12,10 @@ const repoRoutes = require('./routes/repoRoutes');
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'https://cicd-monitoring-dashboard-theta.vercel.app'
+  ],
   credentials: true
 }));
 
