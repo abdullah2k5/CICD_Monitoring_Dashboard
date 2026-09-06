@@ -8,6 +8,7 @@ const cors = require('cors');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const repoRoutes = require('./routes/repoRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 
 const app = express();
 
@@ -18,6 +19,10 @@ app.use(cors({
   ],
   credentials: true
 }));
+
+// Mounted before express.json() so its route-level express.raw() middleware
+// receives the untouched request body — required to verify the HMAC signature.
+app.use('/api/webhooks', webhookRoutes);
 
 // Parses incoming JSON request bodies into req.body for future POST/PUT routes.
 app.use(express.json());
