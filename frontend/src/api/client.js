@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 // Adds auth + JSON headers, and throws a descriptive error for any non-2xx response.
 async function request(path, { method = 'GET', token, body } = {}) {
