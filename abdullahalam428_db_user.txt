@@ -1,0 +1,4 @@
+abdullahalam428_db_user
+jfHlVSBWpzm9KqSc
+mongodb+srv://<db_username>:jfHlVSBWpzm9KqSc@cluster0.l37pdei.mongodb.net/?appName=Cluster0
+9872f69226aba8798df93ea8b0293c10468fc19958a54e801b76f36f381e8baa
