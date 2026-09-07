@@ -41,3 +41,7 @@ export function syncBuildRuns(token, repoId) {
 export function listBuildRuns(token, repoId) {
   return request(`/api/repos/${repoId}/runs`, { method: 'GET', token });
 }
+
+export function analyzeBuildRun(token, repoId, runId) {
+  return request(`/api/repos/${repoId}/runs/${runId}/analyze`, { method: 'POST', token });
+}

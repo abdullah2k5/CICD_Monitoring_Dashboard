@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
-import { listBuildRuns, syncBuildRuns } from '../api/client';
+import { analyzeBuildRun, listBuildRuns, syncBuildRuns } from '../api/client';
 
 function statusChipColor(run) {
   if (run.conclusion === 'success') return 'success';
@@ -33,6 +33,8 @@ function RepoDetail() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
+  const [analyzingIds, setAnalyzingIds] = useState({});
+  const [analysisErrors, setAnalysisErrors] = useState({});
 
   async function loadRuns() {
     setLoading(true);
@@ -62,6 +64,25 @@ function RepoDetail() {
       setError(err.message);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleAnalyze(runId) {
+    setAnalyzingIds((prev) => ({ ...prev, [runId]: true }));
+    setAnalysisErrors((prev) => ({ ...prev, [runId]: '' }));
+    try {
+      const result = await analyzeBuildRun(token, repoId, runId);
+      setRuns((prevRuns) =>
+        prevRuns.map((run) =>
+          run._id === runId
+            ? { ...run, aiAnalysis: result.aiAnalysis, analyzedAt: result.analyzedAt }
+            : run
+        )
+      );
+    } catch (err) {
+      setAnalysisErrors((prev) => ({ ...prev, [runId]: err.message }));
+    } finally {
+      setAnalyzingIds((prev) => ({ ...prev, [runId]: false }));
     }
   }
 
@@ -129,6 +150,42 @@ function RepoDetail() {
                   </Box>
                   <Chip label={statusChipLabel(run)} color={statusChipColor(run)} size="small" />
                 </Box>
+
+                {run.conclusion === 'failure' && (
+                  <Box sx={{ mt: 2 }}>
+                    {run.aiAnalysis ? (
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">
+                          AI Analysis
+                        </Typography>
+                        <Alert severity="info" sx={{ mt: 0.5 }}>
+                          {run.aiAnalysis}
+                        </Alert>
+                      </Box>
+                    ) : (
+                      <>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={Boolean(analyzingIds[run._id])}
+                          startIcon={
+                            analyzingIds[run._id] ? (
+                              <CircularProgress size={14} color="inherit" />
+                            ) : null
+                          }
+                          onClick={() => handleAnalyze(run._id)}
+                        >
+                          {analyzingIds[run._id] ? 'Analyzing...' : 'Analyze Failure with AI'}
+                        </Button>
+                        {analysisErrors[run._id] && (
+                          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
+                            {analysisErrors[run._id]}
+                          </Typography>
+                        )}
+                      </>
+                    )}
+                  </Box>
+                )}
               </CardContent>
             </Card>
           ))}
