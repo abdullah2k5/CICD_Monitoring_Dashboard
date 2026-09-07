@@ -40,7 +40,15 @@ const buildRunSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  createdAt: {
+  aiAnalysis: {
+  type: String,
+  default: null
+},
+analyzedAt: {
+  type: Date,
+  default: null
+},
+createdAt: {
     type: Date,
     default: Date.now
   }

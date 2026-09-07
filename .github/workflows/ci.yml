@@ -29,3 +29,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/cicd-monitoring-backend:latest
             ghcr.io/${{ github.repository_owner }}/cicd-monitoring-backend:${{ github.sha }}
+
+      - name: Intentional failure for AI analysis testing
+        run: exit 1
