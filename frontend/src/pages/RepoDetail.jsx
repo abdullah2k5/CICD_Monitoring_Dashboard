@@ -4,32 +4,23 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   CircularProgress,
+  Grid,
+  Link,
+  Paper,
   Stack,
   Typography,
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
-import { analyzeBuildRun, listBuildRuns, syncBuildRuns } from '../api/client';
-
-function statusChipColor(run) {
-  if (run.conclusion === 'success') return 'success';
-  if (run.conclusion === 'failure') return 'error';
-  return 'default';
-}
-
-function statusChipLabel(run) {
-  if (run.conclusion) return run.conclusion;
-  return run.status || 'unknown';
-}
+import { analyzeBuildRun, listBuildRuns, listRepos, syncBuildRuns } from '../api/client';
+import BuildRunCard from '../components/BuildRunCard';
 
 function RepoDetail() {
   const { repoId } = useParams();
   const { token } = useAuth();
 
   const [runs, setRuns] = useState([]);
+  const [repository, setRepository] = useState(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
@@ -49,12 +40,24 @@ function RepoDetail() {
     }
   }
 
+  async function loadRepository() {
+    try {
+      const repositories = await listRepos(token);
+      const selectedRepository = repositories.find((repo) => repo._id === repoId);
+      setRepository(selectedRepository || null);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   useEffect(() => {
     loadRuns();
+    loadRepository();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoId]);
 
   async function handleSync() {
+    if (syncing) return;
     setSyncing(true);
     setError('');
     try {
@@ -68,6 +71,7 @@ function RepoDetail() {
   }
 
   async function handleAnalyze(runId) {
+    if (analyzingIds[runId]) return;
     setAnalyzingIds((prev) => ({ ...prev, [runId]: true }));
     setAnalysisErrors((prev) => ({ ...prev, [runId]: '' }));
     try {
@@ -87,111 +91,93 @@ function RepoDetail() {
   }
 
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>
-      <Box sx={{ mb: 3 }}>
+    <Stack spacing={{ xs: 3, md: 4 }}>
+        <Box>
         <Button component={RouterLink} to="/dashboard">
-          Back to Dashboard
+          ← Back to Dashboard
         </Button>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 3,
-        }}
-      >
-        <Typography variant="h4" component="h1">
-          Build Runs
-        </Typography>
-        <Button
-          variant="contained"
-          onClick={handleSync}
-          disabled={syncing}
-          startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : null}
-        >
-          {syncing ? 'Syncing...' : 'Sync Builds'}
-        </Button>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
         </Box>
-      ) : runs.length === 0 ? (
-        <Typography color="text.secondary">
-          No build runs yet — click Sync Builds to check GitHub Actions for this repo.
-        </Typography>
-      ) : (
-        <Stack spacing={2}>
-          {runs.map((run) => (
-            <Card key={run._id} variant="outlined">
-              <CardContent>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 2,
-                  }}
-                >
-                  <Box>
-                    <Typography variant="subtitle1">{run.workflowName}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {run.branch} · {run.commitSha?.slice(0, 7)}
-                    </Typography>
-                  </Box>
-                  <Chip label={statusChipLabel(run)} color={statusChipColor(run)} size="small" />
-                </Box>
 
-                {run.conclusion === 'failure' && (
-                  <Box sx={{ mt: 2 }}>
-                    {run.aiAnalysis ? (
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">
-                          AI Analysis
-                        </Typography>
-                        <Alert severity="info" sx={{ mt: 0.5 }}>
-                          {run.aiAnalysis}
-                        </Alert>
-                      </Box>
-                    ) : (
-                      <>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={Boolean(analyzingIds[run._id])}
-                          startIcon={
-                            analyzingIds[run._id] ? (
-                              <CircularProgress size={14} color="inherit" />
-                            ) : null
-                          }
-                          onClick={() => handleAnalyze(run._id)}
-                        >
-                          {analyzingIds[run._id] ? 'Analyzing...' : 'Analyze Failure with AI'}
-                        </Button>
-                        {analysisErrors[run._id] && (
-                          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
-                            {analysisErrors[run._id]}
-                          </Typography>
-                        )}
-                      </>
-                    )}
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3.5 } }}>
+          <Stack spacing={2.5}>
+            <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h2" component="h1" noWrap>
+                  {repository?.name || 'Repository details'}
+                </Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.5 }} noWrap>
+                  {repository?.fullName || 'Repository information unavailable'}
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                onClick={handleSync}
+                disabled={syncing}
+                startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : null}
+              >
+                {syncing ? 'Syncing...' : 'Sync Runs'}
+              </Button>
+            </Box>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {repository && <Typography variant="body2" color={repository.private ? 'text.secondary' : 'success.main'}>{repository.private ? 'Private' : 'Public'}</Typography>}
+              {repository?.defaultBranch && <Typography variant="body2" color="text.secondary">· {repository.defaultBranch}</Typography>}
+              {repository?.htmlUrl && <Link href={repository.htmlUrl} target="_blank" rel="noopener noreferrer" variant="body2" underline="hover">Open on GitHub ↗</Link>}
+            </Stack>
+          </Stack>
+        </Paper>
+
+        {error && (
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={loadRuns} disabled={loading}>Try Again</Button>}>
+            Unable to load workflow runs: {error}
+          </Alert>
+        )}
+
+        <Box>
+          <Typography variant="h4" component="h2">Workflow Runs</Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Recent GitHub Actions workflow executions.</Typography>
+        </Box>
+
+        {loading ? (
+          <Grid container spacing={2}>
+            {[0, 1, 2].map((item) => (
+              <Grid key={item} size={{ xs: 12 }}>
+                <Paper variant="outlined" sx={{ p: 2.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Box sx={{ height: 24, bgcolor: 'action.hover', borderRadius: 1, width: '38%' }} />
+                      <Box sx={{ height: 16, bgcolor: 'action.hover', borderRadius: 1, width: '55%', mt: 1 }} />
+                    </Box>
+                    <Box sx={{ height: 28, bgcolor: 'action.hover', borderRadius: 4, width: 90 }} />
                   </Box>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
-      )}
-    </Box>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        ) : runs.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
+            <Typography variant="h5">No workflow runs found</Typography>
+            <Typography color="text.secondary" sx={{ maxWidth: 480, mx: 'auto', mt: 1 }}>
+              GitHub Actions runs will appear here when they are available for this repository.
+            </Typography>
+            <Button variant="contained" onClick={handleSync} disabled={syncing} sx={{ mt: 3 }}>
+              {syncing ? 'Syncing...' : 'Sync Runs'}
+            </Button>
+          </Paper>
+        ) : (
+          <Stack spacing={2}>
+            {runs.map((run) => (
+              <BuildRunCard
+                key={run._id}
+                run={run}
+                analyzing={Boolean(analyzingIds[run._id])}
+                analysisError={analysisErrors[run._id]}
+                onAnalyze={() => handleAnalyze(run._id)}
+                onRetry={() => handleAnalyze(run._id)}
+              />
+            ))}
+          </Stack>
+        )}
+    </Stack>
   );
 }
 

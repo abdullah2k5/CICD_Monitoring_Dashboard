@@ -4,7 +4,7 @@ const BuildRun = require('../models/BuildRun');
 
 // Recomputes the HMAC over the raw body and compares it to GitHub's signature header.
 function isValidSignature(rawBody, signatureHeader) {
-  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
+  if (!process.env.GITHUB_WEBHOOK_SECRET || !Buffer.isBuffer(rawBody) || !signatureHeader || !signatureHeader.startsWith('sha256=')) {
     return false;
   }
 
@@ -41,26 +41,32 @@ async function handleGithubWebhook(req, res) {
     const payload = JSON.parse(req.body);
     const { repository, workflow_run: run } = payload;
 
-    const repo = await Repo.findOne({ fullName: repository.full_name });
-    if (!repo) {
+    if (!repository?.full_name || !run?.id) {
+      return res.status(200).json({ message: 'Event ignored' });
+    }
+
+    const repos = await Repo.find({ fullName: repository.full_name });
+    if (repos.length === 0) {
       return res.status(200).json({ message: 'Repo not tracked' });
     }
 
-    await BuildRun.findOneAndUpdate(
-      { repo: repo._id, githubRunId: run.id },
-      {
-        repo: repo._id,
-        githubRunId: run.id,
-        workflowName: run.name,
-        status: run.status,
-        conclusion: run.conclusion,
-        branch: run.head_branch,
-        commitSha: run.head_sha,
-        startedAt: run.run_started_at,
-        completedAt: run.updated_at,
-        htmlUrl: run.html_url,
-      },
-      { upsert: true, returnDocument: 'after' }
+    await Promise.all(
+      repos.map((repo) => BuildRun.findOneAndUpdate(
+        { repo: repo._id, githubRunId: run.id },
+        {
+          repo: repo._id,
+          githubRunId: run.id,
+          workflowName: run.name,
+          status: run.status,
+          conclusion: run.conclusion,
+          branch: run.head_branch,
+          commitSha: run.head_sha,
+          startedAt: run.run_started_at,
+          completedAt: run.updated_at,
+          htmlUrl: run.html_url,
+        },
+        { upsert: true, returnDocument: 'after' }
+      ))
     );
 
     return res.status(200).json({ message: 'Build run recorded' });

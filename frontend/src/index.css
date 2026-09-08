@@ -1,6 +1,38 @@
-/* MUI's CssBaseline handles most base resets; keep this file minimal. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+/* MUI's CssBaseline handles most component resets; keep this file global-only. */
 body {
   margin: 0;
+  min-width: 320px;
+  background: #0b1120;
+  color: #f8fafc;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  color: #07111f;
+  background: #93c5fd;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b1120;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 2px solid #0b1120;
+  border-radius: 999px;
 }
 
 #root {

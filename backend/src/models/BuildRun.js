@@ -54,4 +54,6 @@ createdAt: {
   }
 });
 
+buildRunSchema.index({ repo: 1, githubRunId: 1 }, { unique: true });
+
 module.exports = mongoose.model('BuildRun', buildRunSchema);

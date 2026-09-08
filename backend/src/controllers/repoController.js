@@ -1,5 +1,14 @@
 const Repo = require('../models/Repo');
 const BuildRun = require('../models/BuildRun');
+const mongoose = require('mongoose');
+
+function githubFailure(response, message) {
+  if (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') {
+    return { status: 429, message: 'GitHub API rate limit reached. Try again later.' };
+  }
+
+  return { status: 502, message };
+}
 
 async function syncRepos(req, res) {
   try {
@@ -11,7 +20,8 @@ async function syncRepos(req, res) {
     });
 
     if (!response.ok) {
-      return res.status(502).json({ message: 'Failed to fetch repos from GitHub' });
+      const failure = githubFailure(response, 'Failed to fetch repos from GitHub');
+      return res.status(failure.status).json({ message: failure.message });
     }
 
     const githubRepos = await response.json();
@@ -53,6 +63,9 @@ async function listRepos(req, res) {
 
 // Verifies the repo exists and belongs to the requesting user before any build-run access.
 async function findOwnedRepo(repoId, ownerId) {
+  if (!mongoose.Types.ObjectId.isValid(repoId)) {
+    return null;
+  }
   return Repo.findOne({ _id: repoId, owner: ownerId });
 }
 
@@ -74,7 +87,8 @@ async function syncBuildRuns(req, res) {
     );
 
     if (!response.ok) {
-      return res.status(502).json({ message: 'Failed to fetch workflow runs from GitHub' });
+      const failure = githubFailure(response, 'Failed to fetch workflow runs from GitHub');
+      return res.status(failure.status).json({ message: failure.message });
     }
 
     const data = await response.json();
@@ -166,6 +180,10 @@ async function analyzeBuildRun(req, res) {
       return res.status(404).json({ message: 'Repo not found' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(req.params.runId)) {
+      return res.status(404).json({ message: 'Build run not found' });
+    }
+
     const buildRun = await BuildRun.findOne({ _id: req.params.runId, repo: repo._id });
     if (!buildRun) {
       return res.status(404).json({ message: 'Build run not found' });
@@ -188,7 +206,8 @@ async function analyzeBuildRun(req, res) {
       );
 
       if (!jobsResponse.ok) {
-        return res.status(502).json({ message: 'Failed to fetch job details from GitHub' });
+        const failure = githubFailure(jobsResponse, 'Failed to fetch job details from GitHub');
+        return res.status(failure.status).json({ message: failure.message });
       }
 
       const jobsData = await jobsResponse.json();
@@ -217,7 +236,7 @@ async function analyzeBuildRun(req, res) {
           if (!geminiResponse.ok) {
         const errorBody = await geminiResponse.text();
         console.error('Gemini API error:', geminiResponse.status, errorBody);
-        return res.status(502).json({ message: 'Failed to get analysis from Gemini', detail: errorBody });
+            return res.status(502).json({ message: 'Failed to get analysis from Gemini' });
       }
 
       const geminiData = await geminiResponse.json();
