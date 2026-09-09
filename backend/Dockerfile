@@ -11,4 +11,4 @@ USER node
 
 EXPOSE 5000
 
-CMD ["node", "src/server.js"]
+CMD ["node", "src/local.js"]

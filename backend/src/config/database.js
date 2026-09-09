@@ -3,6 +3,10 @@ const mongoose = require('mongoose');
 // Connects to MongoDB Atlas using the URI from the environment; throws on failure
 // so the caller can decide not to start the server with a broken database.
 async function connectDB() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {

@@ -1,6 +1,3 @@
-const dns = require('dns');
-dns.setServers(['1.1.1.1', '8.8.8.8']);
-
 require('dotenv').config();
 
 const express = require('express');
@@ -24,11 +21,20 @@ app.use(cors({
   credentials: true
 }));
 
-// Mounted before express.json() so its route-level express.raw() middleware
-// receives the untouched request body — required to verify the HMAC signature.
+// Establishes one cached MongoDB connection before any route handles a request.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Failed to connect to MongoDB:', err.message);
+    res.status(503).json({ message: 'Database unavailable' });
+  }
+});
+
+// Mounted before express.json() so the webhook route receives the raw request body.
 app.use('/api/webhooks', webhookRoutes);
 
-// Parses incoming JSON request bodies into req.body for future POST/PUT routes.
 app.use(express.json({ limit: '100kb' }));
 
 const authLimiter = rateLimit({
@@ -39,7 +45,6 @@ const authLimiter = rateLimit({
   message: { message: 'Too many authentication attempts. Try again later.' },
 });
 
-// Simple liveness/readiness check for uptime monitoring and load balancers.
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'API is running' });
 });
@@ -47,18 +52,4 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/repos', repoRoutes);
 
-// PORT is injected by the hosting environment in production; 5000 is the local dev default.
-const PORT = process.env.PORT || 5000;
-
-// Connect to the database before accepting traffic; exit if it fails so we
-// never appear "up" while unable to serve real requests.
-connectDB()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('Failed to connect to MongoDB:', err.message);
-    process.exit(1);
-  });
+module.exports = app;

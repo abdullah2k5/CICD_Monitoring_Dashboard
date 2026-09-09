@@ -2,11 +2,11 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "CI/CD Monitoring Dashboard API",
-  "main": "src/server.js",
+  "main": "src/app.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "lint": "node --check src/server.js && node --check src/controllers/repoController.js && node --check src/controllers/webhookController.js",
+    "start": "node src/local.js",
+    "dev": "node --watch src/local.js",
+    "lint": "node --check src/local.js && node --check src/app.js && node --check src/controllers/repoController.js && node --check src/controllers/webhookController.js",
     "test": "node --test test/security.test.js"
   },
   "keywords": [],
