@@ -16,7 +16,8 @@ app.use(helmet());
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://cicd-monitoring-dashboard-theta.vercel.app'
+    'https://cicd-monitoring-dashboard-theta.vercel.app',
+    'https://cicd-monitoring-dashboard-git-feature-github-oauth-project-edb6.vercel.app'
   ],
   credentials: true
 }));
