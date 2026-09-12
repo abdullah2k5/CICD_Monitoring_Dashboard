@@ -118,7 +118,7 @@ function RepoDetail() {
                 {syncing ? 'Syncing...' : 'Sync Runs'}
               </Button>
             </Box>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
               {repository && <Typography variant="body2" color={repository.private ? 'text.secondary' : 'success.main'}>{repository.private ? 'Private' : 'Public'}</Typography>}
               {repository?.defaultBranch && <Typography variant="body2" color="text.secondary">· {repository.defaultBranch}</Typography>}
               {repository?.htmlUrl && <Link href={repository.htmlUrl} target="_blank" rel="noopener noreferrer" variant="body2" underline="hover">Open on GitHub ↗</Link>}

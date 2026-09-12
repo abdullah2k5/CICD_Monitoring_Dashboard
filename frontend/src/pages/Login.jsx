@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { Alert, Box, Button, InputAdornment, Link, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Divider, InputAdornment, Link, TextField, Typography } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import AuthShell from '../components/AuthShell';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 function Login() {
   const { login } = useAuth();
@@ -73,6 +75,17 @@ function Login() {
           {submitting ? 'Signing in...' : 'Sign in'}
         </Button>
       </Box>
+      <Divider sx={{ my: 2, color: 'text.disabled', fontSize: '0.8125rem' }}>or</Divider>
+      <Button
+        component="a"
+        href={`${API_BASE_URL}/api/auth/github`}
+        variant="outlined"
+        color="primary"
+        size="large"
+        fullWidth
+      >
+        Continue with GitHub
+      </Button>
     </AuthShell>
   );
 }

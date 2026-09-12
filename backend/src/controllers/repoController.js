@@ -1,6 +1,8 @@
 const Repo = require('../models/Repo');
 const BuildRun = require('../models/BuildRun');
+const User = require('../models/User');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 function githubFailure(response, message) {
   if (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') {
@@ -10,11 +12,60 @@ function githubFailure(response, message) {
   return { status: 502, message };
 }
 
+// Loads the current user's encrypted GitHub token and decrypts it.
+// Uses the same AES-256-GCM scheme as githubAuthController.js:
+//   key = SHA-256(GITHUB_TOKEN_ENCRYPTION_KEY)
+//   stored value = base64(iv).base64(authTag).base64(ciphertext)
+async function getUserGitHubAccessToken(userId) {
+  // githubAccessTokenEncrypted has select: false, so it must be selected explicitly.
+  const user = await User.findById(userId).select('+githubAccessTokenEncrypted');
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (!user.githubAccessTokenEncrypted) {
+    throw new Error('User has not connected a GitHub account');
+  }
+
+  const encryptionKey = process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error('GitHub token encryption is not configured');
+  }
+
+  const key = crypto.createHash('sha256').update(encryptionKey).digest();
+  const [ivBase64, tagBase64, ciphertextBase64] = user.githubAccessTokenEncrypted.split('.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivBase64, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagBase64, 'base64'));
+
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(ciphertextBase64, 'base64')),
+    decipher.final(),
+  ]);
+
+  return plaintext.toString('utf8');
+}
+
 async function syncRepos(req, res) {
+  // Load the authenticated user's own decrypted GitHub token.
+  let accessToken;
+  try {
+    accessToken = await getUserGitHubAccessToken(req.user.id);
+  } catch (err) {
+    // The user simply has not connected GitHub through OAuth yet.
+    if (err.message === 'User has not connected a GitHub account') {
+      return res.status(400).json({ message: 'GitHub account is not connected' });
+    }
+    // Any other token-loading failure. Log safely (never token contents)
+    // and return a generic error.
+    console.error('Failed to load GitHub token:', err.message);
+    return res.status(500).json({ message: 'Failed to sync repos' });
+  }
+
   try {
     const response = await fetch('https://api.github.com/user/repos', {
       headers: {
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        Authorization: `Bearer ${accessToken}`,
         'User-Agent': 'cicd-monitoring-dashboard',
       },
     });
@@ -70,6 +121,21 @@ async function findOwnedRepo(repoId, ownerId) {
 }
 
 async function syncBuildRuns(req, res) {
+  // Load the authenticated user's own decrypted GitHub token.
+  let accessToken;
+  try {
+    accessToken = await getUserGitHubAccessToken(req.user.id);
+  } catch (err) {
+    // The user simply has not connected GitHub through OAuth yet.
+    if (err.message === 'User has not connected a GitHub account') {
+      return res.status(400).json({ message: 'GitHub account is not connected' });
+    }
+    // Any other token-loading failure. Log safely (never token contents)
+    // and return a generic error.
+    console.error('Failed to load GitHub token:', err.message);
+    return res.status(500).json({ message: 'Failed to sync build runs' });
+  }
+
   try {
     const repo = await findOwnedRepo(req.params.id, req.user.id);
     if (!repo) {
@@ -80,7 +146,7 @@ async function syncBuildRuns(req, res) {
       `https://api.github.com/repos/${repo.fullName}/actions/runs`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           'User-Agent': 'cicd-monitoring-dashboard',
         },
       }
@@ -174,6 +240,21 @@ Important: you only have the job and step names above, not the actual log output
 }
 
 async function analyzeBuildRun(req, res) {
+  // Load the authenticated user's own decrypted GitHub token.
+  let accessToken;
+  try {
+    accessToken = await getUserGitHubAccessToken(req.user.id);
+  } catch (err) {
+    // The user simply has not connected GitHub through OAuth yet.
+    if (err.message === 'User has not connected a GitHub account') {
+      return res.status(400).json({ message: 'GitHub account is not connected' });
+    }
+    // Any other token-loading failure. Log safely (never token contents)
+    // and return a generic error.
+    console.error('Failed to load GitHub token:', err.message);
+    return res.status(500).json({ message: 'Failed to analyze build run' });
+  }
+
   try {
     const repo = await findOwnedRepo(req.params.id, req.user.id);
     if (!repo) {
@@ -199,7 +280,7 @@ async function analyzeBuildRun(req, res) {
         `https://api.github.com/repos/${repo.fullName}/actions/runs/${buildRun.githubRunId}/jobs`,
         {
           headers: {
-            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+            Authorization: `Bearer ${accessToken}`,
             'User-Agent': 'cicd-monitoring-dashboard',
           },
         }
@@ -230,6 +311,7 @@ async function analyzeBuildRun(req, res) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+          signal: AbortSignal.timeout(30000),
         }
       );
 
@@ -247,6 +329,9 @@ async function analyzeBuildRun(req, res) {
       }
     } catch (err) {
       console.error('Gemini call error:', err.message);
+      if (err.name === 'AbortError') {
+        return res.status(504).json({ message: 'Gemini request timed out' });
+      }
       return res.status(502).json({ message: 'Failed to get analysis from Gemini' });
     }
 
@@ -261,4 +346,4 @@ async function analyzeBuildRun(req, res) {
   }
 }
 
-module.exports = { syncRepos, listRepos, syncBuildRuns, listBuildRuns, analyzeBuildRun };
+module.exports = { syncRepos, listRepos, syncBuildRuns, listBuildRuns, analyzeBuildRun, getUserGitHubAccessToken };

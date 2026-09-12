@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -46,6 +46,22 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  // Stores the session produced by the GitHub OAuth flow. Validates before
+  // writing to state; throws so callers can surface the failure. Memoized so
+  // the context value keeps a stable reference across renders.
+  const setOAuthSession = useCallback((token, user) => {
+    if (typeof token !== 'string' || token.trim() === '') {
+      throw new Error('OAuth session requires a non-empty token');
+    }
+
+    if (!user || typeof user !== 'object' || Array.isArray(user)) {
+      throw new Error('OAuth session requires a valid user object');
+    }
+
+    setToken(token);
+    setUser(user);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -54,8 +70,9 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      setOAuthSession,
     }),
-    [user, token]
+    [user, token, setOAuthSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
