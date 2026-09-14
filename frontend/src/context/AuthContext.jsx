@@ -3,9 +3,47 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 const AuthContext = createContext(null);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+const TOKEN_STORAGE_KEY = 'auth_token';
+const USER_STORAGE_KEY = 'auth_user';
+
+function getStoredSession() {
+  try {
+    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+
+    if (!storedToken || !storedUser) {
+      return { token: null, user: null };
+    }
+
+    const parsedUser = JSON.parse(storedUser);
+
+    if (!parsedUser || typeof parsedUser !== 'object' || Array.isArray(parsedUser)) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      return { token: null, user: null };
+    }
+
+    return {
+      token: storedToken,
+      user: parsedUser,
+    };
+  } catch {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+
+    return {
+      token: null,
+      user: null,
+    };
+  }
+}
+
+const initialSession = getStoredSession();
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(null);
-  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(initialSession.token);
+  const [user, setUser] = useState(initialSession.user);
 
   async function login(email, password) {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -20,8 +58,12 @@ export function AuthProvider({ children }) {
       throw new Error(data.message || 'Login failed');
     }
 
+    localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+
     setToken(data.token);
     setUser(data.user);
+
     return data;
   }
 
@@ -42,13 +84,13 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+
     setToken(null);
     setUser(null);
   }
 
-  // Stores the session produced by the GitHub OAuth flow. Validates before
-  // writing to state; throws so callers can surface the failure. Memoized so
-  // the context value keeps a stable reference across renders.
   const setOAuthSession = useCallback((token, user) => {
     if (typeof token !== 'string' || token.trim() === '') {
       throw new Error('OAuth session requires a non-empty token');
@@ -58,14 +100,23 @@ export function AuthProvider({ children }) {
       throw new Error('OAuth session requires a valid user object');
     }
 
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
     setToken(token);
     setUser(user);
   }, []);
 
-  // Merges safe profile fields (e.g. githubUsername after GitHub account
-  // linking) into the in-memory user without issuing a new authentication token.
   const updateUserProfile = useCallback((patch) => {
-    setUser((current) => (current ? { ...current, ...patch } : current));
+    setUser((current) => {
+      if (!current) return current;
+
+      const updatedUser = { ...current, ...patch };
+
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+
+      return updatedUser;
+    });
   }, []);
 
   const value = useMemo(
@@ -87,8 +138,10 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 }
