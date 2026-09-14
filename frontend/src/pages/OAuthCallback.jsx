@@ -76,6 +76,18 @@ function OAuthCallback() {
   const oauthSetterName = OAUTH_SETTER_NAMES.find((name) => typeof auth[name] === 'function');
   const needsOAuthSetter = outcome?.kind === 'success' && !oauthSetterName;
 
+  // Error display is derived from the parse outcome and the missing-setter case;
+  // only a rejected OAuth setter call mutates state asynchronously.
+  const isErrorState =
+    status === 'error' || outcome?.kind === 'error' || needsOAuthSetter;
+
+  const displayMessage =
+    outcome?.kind === 'error'
+      ? outcome.message
+      : needsOAuthSetter
+        ? 'GitHub sign-in succeeded, but this app is not configured to store the OAuth session yet. Please sign in with your email and password.'
+        : errorMessage;
+
   useEffect(() => {
     // StrictMode mounts effects twice in development; only process once.
     if (processedRef.current) return;
@@ -120,18 +132,6 @@ function OAuthCallback() {
       setStatus('error');
     }
   }, [auth, navigate, outcome, oauthSetterName, displayMessage]);
-
-  // Error display is derived from the parse outcome and the missing-setter case;
-  // only a rejected OAuth setter call mutates state asynchronously.
-  const isErrorState =
-    status === 'error' || outcome?.kind === 'error' || needsOAuthSetter;
-
-  const displayMessage =
-    outcome?.kind === 'error'
-      ? outcome.message
-      : needsOAuthSetter
-        ? 'GitHub sign-in succeeded, but this app is not configured to store the OAuth session yet. Please sign in with your email and password.'
-        : errorMessage;
 
   return (
     <AuthShell
