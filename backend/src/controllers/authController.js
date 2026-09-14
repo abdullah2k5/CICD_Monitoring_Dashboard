@@ -12,6 +12,7 @@ function toSafeUser(user) {
     id: user._id,
     name: user.name,
     email: user.email,
+    githubUsername: user.githubUsername || null,
     createdAt: user.createdAt,
   };
 }

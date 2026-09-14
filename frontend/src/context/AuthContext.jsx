@@ -62,6 +62,12 @@ export function AuthProvider({ children }) {
     setUser(user);
   }, []);
 
+  // Merges safe profile fields (e.g. githubUsername after GitHub account
+  // linking) into the in-memory user without issuing a new authentication token.
+  const updateUserProfile = useCallback((patch) => {
+    setUser((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -71,8 +77,9 @@ export function AuthProvider({ children }) {
       register,
       logout,
       setOAuthSession,
+      updateUserProfile,
     }),
-    [user, token, setOAuthSession]
+    [user, token, setOAuthSession, updateUserProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

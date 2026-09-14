@@ -31,6 +31,13 @@ function parseOAuthQuery() {
     return { kind: 'error', message: message || 'GitHub sign-in failed. Please try again.' };
   }
 
+ // Account linking succeeded. The backend handles the GitHub OAuth callback
+// and redirects here; it never puts the app JWT or GitHub token in this URL.
+// The dashboard tab remains alive and receives the safe result over postMessage.
+  if (params.get('github') === 'linked') {
+    return { kind: 'link-success', username: params.get('username') || '' };
+  }
+
   // No token means no authenticated session to store.
   if (!token) {
     return { kind: 'error', message: 'No sign-in information was received. Please try signing in again.' };
@@ -78,6 +85,26 @@ function OAuthCallback() {
     // query string is short-lived, but it should not linger in the address bar.
     window.history.replaceState({}, '', window.location.pathname);
 
+    // When the "Connect GitHub" flow opened this page in a popup, relay the safe
+    // result to the still-authenticated dashboard tab and close this tab. The
+    // message never carries the app JWT or any GitHub access token.
+    if (typeof window.opener === 'object' && window.opener !== null) {
+      const result =
+        outcome?.kind === 'link-success'
+          ? { type: 'GITHUB_LINK_RESULT', status: 'ok', username: outcome.username }
+          : { type: 'GITHUB_LINK_RESULT', status: 'error', message: displayMessage };
+      window.opener.postMessage(result, window.location.origin);
+      window.close();
+      return;
+    }
+
+    // Linking result opened as a normal tab: the in-memory session was lost in
+    // the round trip, so the dashboard will bounce to the sign-in page.
+    if (outcome?.kind === 'link-success') {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+
     if (outcome?.kind !== 'success' || !oauthSetterName) {
       return;
     }
@@ -92,7 +119,7 @@ function OAuthCallback() {
       setErrorMessage(err && err.message ? err.message : 'GitHub sign-in failed. Please try again.');
       setStatus('error');
     }
-  }, [auth, navigate, outcome, oauthSetterName]);
+  }, [auth, navigate, outcome, oauthSetterName, displayMessage]);
 
   // Error display is derived from the parse outcome and the missing-setter case;
   // only a rejected OAuth setter call mutates state asynchronously.

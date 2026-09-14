@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Grid,
   Paper,
@@ -13,18 +14,22 @@ import {
   Typography,
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
-import { listRepos, syncRepos } from '../api/client';
+import { listRepos, syncRepos, API_BASE_URL } from '../api/client';
 import RepositoryCard from '../components/RepositoryCard';
 
 function Dashboard() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, updateUserProfile } = useAuth();
   const navigate = useNavigate();
 
   const [repos, setRepos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [githubLinked, setGithubLinked] = useState(false);
+
+  const githubConnected = Boolean(user?.githubUsername);
 
   async function loadRepos() {
     setLoading(true);
@@ -44,6 +49,33 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Receives the account-linking result from the /oauth/callback popup tab.
+  useEffect(() => {
+    function handleLinkResult(event) {
+      // Only trust messages from our own origin (the popup's /oauth/callback).
+      if (event.origin !== window.location.origin) return;
+      if (!event.data || event.data.type !== 'GITHUB_LINK_RESULT') return;
+
+      setConnecting(false);
+      if (event.data.status === 'ok' && typeof event.data.username === 'string') {
+        updateUserProfile({ githubUsername: event.data.username });
+        setGithubLinked(true);
+        setError('');
+        loadRepos();
+      } else {
+        setError(
+          event.data.status === 'error' && typeof event.data.message === 'string'
+            ? event.data.message
+            : 'GitHub linking failed. Please try again.'
+        );
+      }
+    }
+
+    window.addEventListener('message', handleLinkResult);
+    return () => window.removeEventListener('message', handleLinkResult);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateUserProfile]);
+
   async function handleSync() {
     if (syncing) return;
     setSyncing(true);
@@ -56,6 +88,43 @@ function Dashboard() {
       setError(err.message);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // Starts GitHub account linking. The app JWT is sent in the Authorization
+  // header to obtain a short-lived, single-purpose link URL; the long-lived JWT
+  // is never placed in a URL. GitHub OAuth runs in a popup so the authenticated
+  // dashboard tab keeps its session while the user is on GitHub.
+  async function handleConnectGithub() {
+    if (connecting) return;
+    setError('');
+
+    // Open the popup synchronously so the browser treats it as a user gesture.
+    const popup = window.open('', 'github-link', 'width=520,height=640');
+    if (!popup) {
+      setError('Pop-up blocked. Allow pop-ups for this site and try again.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/github/link/start`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data || typeof data.linkUrl !== 'string') {
+        popup.close();
+        setError(data?.message || 'Failed to start GitHub linking');
+        return;
+      }
+
+      setConnecting(true);
+      popup.location.href = `${API_BASE_URL}${data.linkUrl}`;
+    } catch (err) {
+      popup.close();
+      setError(err.message || 'Failed to start GitHub linking');
     }
   }
 
@@ -107,14 +176,33 @@ function Dashboard() {
             Connected GitHub repositories
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          onClick={handleSync}
-          disabled={syncing}
-          startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : null}
-        >
-          {syncing ? 'Syncing...' : 'Sync Repositories'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          {githubConnected ? (
+            <Chip
+              label={`GitHub Connected: ${user?.githubUsername}`}
+              color="success"
+              variant="outlined"
+            />
+          ) : (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleConnectGithub}
+              disabled={connecting || syncing}
+              startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : null}
+            >
+              {connecting ? 'Connecting GitHub...' : 'Connect GitHub'}
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            onClick={handleSync}
+            disabled={syncing || connecting}
+            startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : null}
+          >
+            {syncing ? 'Syncing...' : 'Sync Repositories'}
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -209,6 +297,12 @@ function Dashboard() {
         autoHideDuration={4000}
         onClose={() => setSyncSuccess(false)}
         message="Repositories synchronized successfully"
+      />
+      <Snackbar
+        open={githubLinked}
+        autoHideDuration={4000}
+        onClose={() => setGithubLinked(false)}
+        message="GitHub account connected successfully"
       />
     </Stack>
   );
